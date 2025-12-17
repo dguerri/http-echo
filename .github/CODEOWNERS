@@ -1,4 +1,4 @@
-* @hashicorp/consul-core
+* @hashicorp/github-nomad-core @hashicorp/nomad-eng
 
 # release configuration
 /.release/                              @hashicorp/release-engineering
