@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/http-echo/version"
@@ -16,8 +18,10 @@ const (
 	httpHeaderAppName    string = "X-App-Name"
 	httpHeaderAppVersion string = "X-App-Version"
 
-	httpLogDateFormat string = "2006/01/02 15:04:05"
-	httpLogFormat     string = "%v %s %s \"%s %s %s\" %d %d \"%s\" %v\n"
+	httpLogDateFormat        string = "2006/01/02 15:04:05"
+	httpLogFormat            string = "%v %s %s \"%s %s %s\" %d %d \"%s\" %v\n"
+	httpLogFormatWithForward string = "%v %s %s %s \"%s %s %s\" %d %d \"%s\" %v\n"
+	httpLogEnvForwardedFor   string = "LOG_FORWARDED_FOR"
 )
 
 // withAppHeaders adds application headers such as X-App-Version and X-App-Name.
@@ -70,10 +74,27 @@ func httpLog(out io.Writer, h http.HandlerFunc) http.HandlerFunc {
 			length := mrw.length
 			end := time.Now()
 			dur := end.Sub(start)
-			fmt.Fprintf(out, httpLogFormat,
-				end.Format(httpLogDateFormat),
-				r.Host, r.RemoteAddr, r.Method, r.URL.Path, r.Proto,
-				status, length, r.UserAgent(), dur)
+
+			if os.Getenv(httpLogEnvForwardedFor) != "" {
+				forwardedFor := r.Header.Get("X-Forwarded-For")
+				if forwardedFor != "" {
+					// Extract first IP from comma-separated list
+					if idx := strings.Index(forwardedFor, ","); idx != -1 {
+						forwardedFor = strings.TrimSpace(forwardedFor[:idx])
+					}
+				} else {
+					forwardedFor = "-"
+				}
+				fmt.Fprintf(out, httpLogFormatWithForward,
+					end.Format(httpLogDateFormat),
+					r.Host, r.RemoteAddr, forwardedFor, r.Method, r.URL.Path, r.Proto,
+					status, length, r.UserAgent(), dur)
+			} else {
+				fmt.Fprintf(out, httpLogFormat,
+					end.Format(httpLogDateFormat),
+					r.Host, r.RemoteAddr, r.Method, r.URL.Path, r.Proto,
+					status, length, r.UserAgent(), dur)
+			}
 		}(time.Now())
 
 		h(&mrw, r)
